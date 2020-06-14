@@ -40,8 +40,23 @@ const templates = [
 
 
 async function handleRequest(request) {
-  const {Env} = wasm_bindgen
+  const {create_env} = wasm_bindgen
   await wasm_bindgen(wasm)
+  let env
+  try {
+    env = create_env(templates)
+  } catch (e) {
+    if (e instanceof SyntaxError) {
+      // this is an invalid templates
+      console.warn('invalid template:', e)
+      return new Response(`Invalid Template\n\n${e.message}`, {status: 502})
+    } else {
+      console.error('error creating template environment:', e)
+      return new Response(`Error Creating Template Environment\n\n${e.message}`, {status: 500})
+    }
+  }
+  console.log('env:', env)
+
   const context = {
     title: 'This is working!',
     date: new Date(),
@@ -50,9 +65,15 @@ async function handleRequest(request) {
       'Apple': 'Pie',
     }
   }
-  const env = Env.new(templates)
-  console.log('env:', env)
-  const html = env.render('main.jinja', JSON.stringify(context))
+
+  let html
+  try {
+    html = env.render('main.jinja', JSON.stringify(context))
+  } catch (e) {
+      console.warn('error rendering template:', e)
+      return new Response(`Rendering Error\n\n${e.message}`, {status: 502})
+  }
+
   return new Response(html, {
     status: 200,
     headers: {'content-type': 'text/html'}
