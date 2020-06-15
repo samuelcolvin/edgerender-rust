@@ -27,7 +27,7 @@ const templates = [
 {% extends 'base.jinja' %}
 
 {% block main %}
-  <p>{{ date|date(format="%Y-%m-%d %A %H:%M") }}</p>
+  <p>{{ date|date(format="%Y-%m-%d %A %H:%M:%S") }}</p>
   <ul>
     {% for name, item in things %}
       <li><b>{{ name }}:</b> {{ item }}</li>
@@ -38,24 +38,27 @@ const templates = [
   }
 ]
 
+let ENV = null
 
 async function handleRequest(request) {
   const {create_env} = wasm_bindgen
   await wasm_bindgen(wasm)
-  let env
-  try {
-    env = create_env(templates)
-  } catch (e) {
-    if (e instanceof SyntaxError) {
-      // this is an invalid templates
-      console.warn('invalid template:', e)
-      return new Response(`Invalid Template\n\n${e.message}`, {status: 502})
-    } else {
-      console.error('error creating template environment:', e)
-      return new Response(`Error Creating Template Environment\n\n${e.message}`, {status: 500})
+
+  console.log('env before:', ENV)
+  if (!ENV) {
+    try {
+      ENV = create_env(templates)
+    } catch (e) {
+      if (e instanceof SyntaxError) {
+        // this is an invalid templates
+        console.warn('invalid template:', e)
+        return new Response(`Invalid Template\n\n${e.message}`, {status: 502})
+      } else {
+        console.error('error creating template environment:', e)
+        return new Response(`Error Creating Template Environment\n\n${e.message}`, {status: 500})
+      }
     }
   }
-  console.log('env:', env)
 
   const context = {
     title: 'This is working!',
@@ -68,7 +71,7 @@ async function handleRequest(request) {
 
   let html
   try {
-    html = env.render('main.jinja', JSON.stringify(context))
+    html = ENV.render('main.jinja', JSON.stringify(context))
   } catch (e) {
       console.warn('error rendering template:', e)
       return new Response(`Rendering Error\n\n${e.message}`, {status: 502})
