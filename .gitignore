@@ -7,3 +7,6 @@ wasm-pack.log
 worker/generated/
 /.idea/
 /sandbox/
+/dist/
+/node_modules/
+/worker/

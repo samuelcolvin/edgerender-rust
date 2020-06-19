@@ -40,8 +40,7 @@ const templates = [
 
 
 async function handleRequest(request) {
-  const {create_env} = wasm_bindgen
-  await wasm_bindgen(wasm)
+  const {create_env} = await import('./pkg')
   let env
   try {
     env = create_env(templates)
