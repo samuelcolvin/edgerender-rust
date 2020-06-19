@@ -1,5 +1,5 @@
 addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request))
+  event.respondWith(handle(event.request))
 })
 
 const templates = [
@@ -19,7 +19,7 @@ const templates = [
     {% endblock %}
   </body>
 </html>
-`
+`,
   },
   {
     name: 'main.jinja',
@@ -27,19 +27,18 @@ const templates = [
 {% extends 'base.jinja' %}
 
 {% block main %}
-  <p>{{ date|date(format="%Y-%m-%d %A %H:%M") }}</p>
+  <p>{{ date|date(format="%Y-%m-%d %A %H:%M:%S") }}</p>
   <ul>
     {% for name, item in things %}
       <li><b>{{ name }}:</b> {{ item }}</li>
     {% endfor %}
   </ul>
 {% endblock %}
-`
-  }
+`,
+  },
 ]
 
-
-async function handleRequest(request) {
+async function handle(request) {
   const {create_env} = await import('./pkg')
   let env
   try {
@@ -60,21 +59,21 @@ async function handleRequest(request) {
     title: 'This is working!',
     date: new Date(),
     things: {
-      'Foo': 'Bar',
-      'Apple': 'Pie',
-    }
+      Foo: 'Bar',
+      Apple: 'Pie',
+    },
   }
 
   let html
   try {
     html = env.render('main.jinja', JSON.stringify(context))
   } catch (e) {
-      console.warn('error rendering template:', e)
-      return new Response(`Rendering Error\n\n${e.message}`, {status: 502})
+    console.warn('error rendering template:', e)
+    return new Response(`Rendering Error\n\n${e.message}`, {status: 502})
   }
 
   return new Response(html, {
     status: 200,
-    headers: {'content-type': 'text/html'}
+    headers: {'content-type': 'text/html'},
   })
 }
