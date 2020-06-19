@@ -1,6 +1,31 @@
-addEventListener('fetch', event => {
-  event.respondWith(handle(event.request))
-})
+import YAML from 'yaml'
+
+export default function (event, config_url) {
+  return event.respondWith(wrap_error(event.request, config_url))
+}
+
+async function wrap_error(request, config_url) {
+  console.log('request:', request)
+  console.log('config_url:', config_url)
+  try {
+    return await handle(request, config_url)
+  } catch (e) {
+    console.error(`error handling request to ${request.url}:`, e)
+    // TODO log error
+    return new Response(`Error handling request: ${e}`, {
+      status: 500,
+      headers: {'content-type': 'text/plain'},
+    })
+  }
+}
+
+const some_yaml = `
+foo: "this is foo"
+bar: 123
+yaml:
+  - A complete JavaScript implementation
+  - https://www.npmjs.com/package/yaml
+`
 
 const templates = [
   {
@@ -38,8 +63,8 @@ const templates = [
   },
 ]
 
-async function handle(request) {
-  const {create_env} = await import('./pkg')
+async function handle(request, config_url) {
+  const {create_env} = await import('./edgerender-pkg')
   let env
   try {
     env = create_env(templates)
@@ -63,6 +88,9 @@ async function handle(request) {
       Apple: 'Pie',
     },
   }
+  const config = YAML.parse(some_yaml)
+  console.log('config:', config)
+  Object.assign(context, config)
 
   let html
   try {

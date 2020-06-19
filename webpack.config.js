@@ -4,7 +4,7 @@ const { CleanWebpackPlugin } = require('clean-webpack-plugin')
 
 module.exports = {
   target: 'webworker',
-  entry: './src/index.js',
+  entry: './index.js',
   mode: 'production',
   optimization: {
     minimize: false,
@@ -16,7 +16,7 @@ module.exports = {
     new CleanWebpackPlugin(),
     new WasmPackPlugin({
       crateDirectory: path.resolve(__dirname, '.'),
-      outDir: 'src/pkg',
+      outDir: 'src/edgerender-pkg',
     }),
   ],
 }
