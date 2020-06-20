@@ -18,26 +18,26 @@ async function wrap_error(request, config_url) {
   }
 }
 
+let ENV = null
+
 async function handle(request, config_url) {
   const config = await load_config(config_url)
   console.log('config:', config)
   const templates = await load_templates_s3(config)
   console.log('templates:', templates)
 
-  const {create_env} = await import('./edgerender-pkg')
-  let env
-  try {
-    env = create_env(templates)
-  } catch (e) {
-    if (e instanceof SyntaxError) {
-      // this is an invalid templates
-      console.log('templates:', templates)
-      console.warn('invalid template:', e)
-      return new Response(`Invalid Template\n\n${e.message}`, {status: 502})
-    } else {
-      console.log('templates:', templates)
-      console.error('error creating template environment:', e)
-      return new Response(`Error Creating Template Environment\n\n${e.message}`, {status: 500})
+  const {create_env} = await import('../edgerender-pkg')
+  if (!ENV) {
+    try {
+      ENV = create_env(templates)
+    } catch (e) {
+      if (e instanceof SyntaxError) {
+        // this is an invalid templates
+        console.warn('invalid template:', e)
+        return new Response(`Invalid Template\n\n${e.message}`, {status: 502})
+      } else {
+        throw e
+      }
     }
   }
 
@@ -55,7 +55,7 @@ async function handle(request, config_url) {
 
   let html
   try {
-    html = env.render('main.jinja', JSON.stringify(context))
+    html = ENV.render('main.jinja', JSON.stringify(context))
   } catch (e) {
     console.warn('error rendering template:', e)
     return new Response(`Rendering Error\n\n${e.message}`, {status: 502})
