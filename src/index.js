@@ -1,0 +1,68 @@
+import {load_config, load_templates_s3} from './config'
+
+export default function(event, config_url) {
+  return event.respondWith(wrap_error(event.request, config_url))
+}
+
+async function wrap_error(request, config_url) {
+  console.log(`config_url: ${config_url} request:`, request)
+  try {
+    return await handle(request, config_url)
+  } catch (e) {
+    console.error(`error handling request to ${request.url}:`, e)
+    // TODO log error
+    return new Response(`Error handling request:\n\n  ${e.message}`, {
+      status: 500,
+      headers: {'content-type': 'text/plain'},
+    })
+  }
+}
+
+async function handle(request, config_url) {
+  const config = await load_config(config_url)
+  console.log('config:', config)
+  const templates = await load_templates_s3(config)
+  console.log('templates:', templates)
+
+  const {create_env} = await import('./edgerender-pkg')
+  let env
+  try {
+    env = create_env(templates)
+  } catch (e) {
+    if (e instanceof SyntaxError) {
+      // this is an invalid templates
+      console.log('templates:', templates)
+      console.warn('invalid template:', e)
+      return new Response(`Invalid Template\n\n${e.message}`, {status: 502})
+    } else {
+      console.log('templates:', templates)
+      console.error('error creating template environment:', e)
+      return new Response(`Error Creating Template Environment\n\n${e.message}`, {status: 500})
+    }
+  }
+
+  const context = {
+    title: 'This is working!',
+    date: new Date(),
+    items: {
+      Foo: 'Bar',
+      Apple: 'Pie',
+    },
+  }
+  if (config.context) {
+    Object.assign(context, config.context)
+  }
+
+  let html
+  try {
+    html = env.render('main.jinja', JSON.stringify(context))
+  } catch (e) {
+    console.warn('error rendering template:', e)
+    return new Response(`Rendering Error\n\n${e.message}`, {status: 502})
+  }
+
+  return new Response(html, {
+    status: 200,
+    headers: {'content-type': 'text/html'},
+  })
+}
