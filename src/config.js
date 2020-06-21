@@ -1,12 +1,7 @@
-import yaml from 'yaml'
-
-export async function load_config(config_url) {
+export async function load_config(config_url, parse_config) {
   const content = await fetch_text(config_url)
-  const config = yaml.parse(content)
-  config.url = config_url
-  config.template_prefix = config.template_prefix || 'templates'
-  config.template_root = config.template_root || `https://${new URL(config_url).hostname}`
-  return config
+  const default_template_root = `https://${new URL(config_url).hostname}`
+  return parse_config(content, config_url, default_template_root)
 }
 
 export async function load_templates_s3(config) {
@@ -27,7 +22,7 @@ export async function load_templates_s3(config) {
 }
 
 async function fetch_text(url) {
-  const r = await fetch(url)
+  const r = await fetch(`${url}${url.includes('?') ? '&' : '?'}ts=${new Date().getTime()}`)
   if (r.status !== 200) {
     throw Error(`unexpected response getting list of templates ${url}: ${r.status}`)
   }

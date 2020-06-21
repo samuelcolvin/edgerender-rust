@@ -11,7 +11,7 @@ async function wrap_error(request, config_url) {
   } catch (e) {
     console.error(`error handling request to ${request.url}:`, e)
     // TODO log error
-    return new Response(`Error handling request:\n\n  ${e.message}`, {
+    return new Response(`\nError handling request:\n\n  ${e.message}\n`, {
       status: 500,
       headers: {'content-type': 'text/plain'},
     })
@@ -21,15 +21,15 @@ async function wrap_error(request, config_url) {
 let ENV = null
 
 async function handle(request, config_url) {
-  const config = await load_config(config_url)
+  const {create_env, parse_config} = await import('../edgerender-pkg')
+  const config = await load_config(config_url, parse_config)
   console.log('config:', config)
   const templates = await load_templates_s3(config)
   console.log('templates:', templates)
 
-  const {create_env} = await import('../edgerender-pkg')
   if (!ENV) {
     try {
-      ENV = create_env(templates)
+      ENV = create_env(templates, config)
     } catch (e) {
       if (e instanceof SyntaxError) {
         // this is an invalid templates

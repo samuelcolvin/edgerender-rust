@@ -2,16 +2,18 @@ extern crate cfg_if;
 extern crate wasm_bindgen;
 extern crate console_error_panic_hook;
 extern crate tera;
-
-#[macro_use]
 extern crate serde_derive;
 
 use wasm_bindgen::prelude::*;
 use js_sys::{Error, SyntaxError};
+use serde_derive::Deserialize;
 use tera::{Tera, Context};
 use serde_json::Value;
+use config::Config;
 
 mod utils;
+mod macros;
+mod config;
 
 #[derive(Deserialize)]
 pub struct Template {
@@ -22,15 +24,7 @@ pub struct Template {
 #[wasm_bindgen]
 pub struct Env {
     tera: Tera,
-}
-
-macro_rules! err {
-    ($msg:expr) => (
-        Err(Error::new(&format!("{}", $msg)).into())
-    );
-    ($fmt:expr, $($arg:expr),+) => (
-        Err(Error::new(&format!($fmt, $($arg),+)).into())
-    );
+    config: Config,
 }
 
 #[wasm_bindgen]
@@ -40,10 +34,11 @@ impl Env {
             Err(e) => return err!("Error parsing context JSON: {:?}", e),
             Ok(v) => v,
         };
-        let template_context = match Context::from_value(context_value) {
+        let mut template_context = match Context::from_value(context_value) {
             Err(e) => return err!("Error building tera context: {:?}", e),
             Ok(v) => v,
         };
+        self.config.add_context(&mut template_context);
         match self.tera.render(template_name, &template_context) {
             Err(e) => err!("Error rendering template {}: {:?}", template_name, e),
             Ok(v) => Ok(v),
@@ -52,7 +47,7 @@ impl Env {
 }
 
 #[wasm_bindgen]
-pub fn create_env(templates: &JsValue) -> Result<Env, JsValue>
+pub fn create_env(templates: &JsValue, config: Config) -> Result<Env, JsValue>
 {
     console_error_panic_hook::set_once();
 
@@ -68,5 +63,5 @@ pub fn create_env(templates: &JsValue) -> Result<Env, JsValue>
             Ok(v) => v,
         };
     }
-    Ok(Env { tera })
+    Ok(Env { tera, config })
 }
