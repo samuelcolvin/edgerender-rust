@@ -47,6 +47,11 @@ impl Config {
             None => self.template_root_default.clone(),
         }
     }
+
+    #[wasm_bindgen(getter)]
+    pub fn context(&self) -> JsValue {
+        JsValue::from_serde(&self.context).unwrap()
+    }
 }
 
 impl Config {

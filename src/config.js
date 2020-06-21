@@ -23,8 +23,9 @@ export async function load_templates_s3(config) {
 
 async function fetch_text(url) {
   const r = await fetch(`${url}${url.includes('?') ? '&' : '?'}ts=${new Date().getTime()}`)
-  if (r.status !== 200) {
-    throw Error(`unexpected response getting list of templates ${url}: ${r.status}`)
+  if (r.status === 200) {
+    return await r.text()
+  } else {
+    throw Error(`unexpected response getting ${url}: ${r.status}`)
   }
-  return await r.text()
 }
