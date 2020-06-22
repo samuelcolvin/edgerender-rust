@@ -1,7 +1,7 @@
 export async function load_config(config_url, parse_config) {
   const content = await fetch_text(config_url)
-  const default_template_root = `https://${new URL(config_url).hostname}`
-  return parse_config(content, config_url, default_template_root)
+  const config_origin = `https://${new URL(config_url).hostname}`
+  return parse_config(content, config_url, config_origin)
 }
 
 export async function load_templates_s3(config) {
