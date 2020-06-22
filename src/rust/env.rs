@@ -1,11 +1,11 @@
-use std::collections::HashMap;
-use wasm_bindgen::prelude::*;
-use js_sys::{Error, SyntaxError};
-use serde::Deserialize;
-use tera::{Tera, Context, Result as TeraResult};
-use serde_json::{Value, to_string_pretty};
 use crate::config::Config;
 use crate::router::RouteMatch;
+use js_sys::{Error, SyntaxError};
+use serde::Deserialize;
+use serde_json::{to_string_pretty, Value};
+use std::collections::HashMap;
+use tera::{Context, Result as TeraResult, Tera};
+use wasm_bindgen::prelude::*;
 
 #[derive(Deserialize)]
 pub struct Template {
@@ -20,7 +20,12 @@ pub struct Env {
 
 #[wasm_bindgen]
 impl Env {
-    pub fn render(&self, config: &Config, route_match: &JsValue, context_json: Option<String>) -> Result<String, JsValue> {
+    pub fn render(
+        &self,
+        config: &Config,
+        route_match: &JsValue,
+        context_json: Option<String>,
+    ) -> Result<String, JsValue> {
         let route_match_: RouteMatch = match route_match.into_serde() {
             Err(e) => return err!("route_match not a valid RouteMatch object: {:?}", e),
             Ok(v) => v,
@@ -43,7 +48,7 @@ impl Env {
 
         let template_name = match route_match_.template {
             Some(v) => v,
-            None => config.get_default_template()
+            None => config.get_default_template(),
         };
         match self.tera.render(&template_name, &template_context) {
             Err(e) => err!("Error rendering template {}: {:?}", &template_name, e),
@@ -71,7 +76,7 @@ fn to_json(obj: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
     let pretty: bool = match args.get("pretty") {
         Some(v) => match v.as_bool() {
             Some(v_) => v_,
-            _ => return Err("'pretty' argument must be a boolean".into())
+            _ => return Err("'pretty' argument must be a boolean".into()),
         },
         _ => false,
     };
@@ -83,8 +88,7 @@ fn to_json(obj: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
 }
 
 #[wasm_bindgen]
-pub fn create_env(templates: &JsValue) -> Result<Env, JsValue>
-{
+pub fn create_env(templates: &JsValue) -> Result<Env, JsValue> {
     console_error_panic_hook::set_once();
 
     let templates_vec: Vec<Template> = match templates.into_serde() {

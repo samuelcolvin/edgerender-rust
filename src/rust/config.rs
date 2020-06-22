@@ -1,10 +1,10 @@
-use std::collections::BTreeMap;
-use wasm_bindgen::prelude::*;
-use serde_json::Value;
-use serde::Deserialize;
+use crate::router::{find_route, Route};
 use js_sys::Error;
+use serde::Deserialize;
+use serde_json::Value;
+use std::collections::BTreeMap;
 use tera::Context;
-use crate::router::{Route, find_route};
+use wasm_bindgen::prelude::*;
 
 fn default_templates_prefix() -> String {
     "templates".to_string()
@@ -35,10 +35,14 @@ pub struct Config {
 #[wasm_bindgen]
 impl Config {
     #[wasm_bindgen(getter)]
-    pub fn url(&self) -> String { self.url.clone() }
+    pub fn url(&self) -> String {
+        self.url.clone()
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn upstream_root(&self) -> String { self.upstream_root.clone() }
+    pub fn upstream_root(&self) -> String {
+        self.upstream_root.clone()
+    }
 
     #[wasm_bindgen(getter)]
     pub fn routes(&self) -> JsValue {
@@ -46,10 +50,14 @@ impl Config {
     }
 
     #[wasm_bindgen(getter)]
-    pub fn default_template(&self) -> String { self.default_template.clone() }
+    pub fn default_template(&self) -> String {
+        self.default_template.clone()
+    }
 
     #[wasm_bindgen(getter)]
-    pub fn template_prefix(&self) -> String { self.template_prefix.clone() }
+    pub fn template_prefix(&self) -> String {
+        self.template_prefix.clone()
+    }
 
     #[wasm_bindgen(getter)]
     pub fn template_root(&self) -> String {
@@ -80,14 +88,16 @@ impl Config {
         }
     }
 
-    pub fn get_default_template(&self) -> String { self.default_template.clone() }
+    pub fn get_default_template(&self) -> String {
+        self.default_template.clone()
+    }
 }
 
 #[wasm_bindgen]
 pub fn parse_config(s: String, url: String, default_template_root: String) -> Result<Config, JsValue> {
     let mut config: Config = match serde_yaml::from_str(&s) {
         Err(e) => return err!("Error loading config: {}", e),
-        Ok(config) => config
+        Ok(config) => config,
     };
     config.url = url;
     config.template_root_default = default_template_root;

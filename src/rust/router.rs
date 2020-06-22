@@ -1,12 +1,12 @@
+use lazy_static::lazy_static;
+use regex::{Captures, Regex};
+use serde::de::{Deserializer, Error as SerdeError, Visitor};
+use serde::ser::Serializer;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fmt;
-use serde_json::Value;
-use serde::{Serialize, Deserialize};
-use serde::ser::Serializer;
-use serde::de::{Deserializer, Visitor, Error as SerdeError};
-use regex::{Regex, Captures};
 use tera::Context;
-use lazy_static::lazy_static;
 
 lazy_static! {
     static ref VARIABLE_REGEX: Regex = Regex::new(r"\{(?P<name>[a-zA-Z0-9_]+)?(?::(?P<regex>[^}]+))?\}").unwrap();
@@ -15,7 +15,7 @@ lazy_static! {
 fn replace_variable(caps: &Captures) -> String {
     let regex = match caps.name("regex") {
         Some(m) => m.as_str(),
-        None => r"[^{}/]+"
+        None => r"[^{}/]+",
     };
     match caps.name("name") {
         Some(name) => format!(r"(?P<{}>{})", name.as_str(), regex),
@@ -47,9 +47,9 @@ where
                     true => "?$",
                     false => "/?$",
                 });
-                return Regex::new(&router_re_str).map_err(SerdeError::custom)
+                return Regex::new(&router_re_str).map_err(SerdeError::custom);
             } else {
-                return Err(SerdeError::custom("route matches must start with a forward slash '/'"))
+                return Err(SerdeError::custom("route matches must start with a forward slash '/'"));
             }
         }
     }
@@ -95,7 +95,6 @@ impl RouteMatch {
         }
     }
 }
-
 
 impl Route {
     pub fn maybe_match(&self, route_index: usize, path: &str) -> Option<RouteMatch> {
@@ -144,11 +143,10 @@ impl Route {
     }
 }
 
-
 pub fn find_route(routes: &Vec<Route>, path: &str) -> Option<RouteMatch> {
     for (i, route) in routes.iter().enumerate() {
         if let Some(route_match) = route.maybe_match(i, path) {
-            return Some(route_match)
+            return Some(route_match);
         }
     }
     None
