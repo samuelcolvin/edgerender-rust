@@ -9,7 +9,9 @@ let ENV = null
 async function wrap_error(request, config_url) {
   console.log(`${request.method} ${request.url}`)
   try {
-    ENV = await new Env().load(config_url)
+    if (!ENV) {
+      ENV = await new Env().load(config_url)
+    }
     return await new Handler(ENV, request).handle()
   } catch (e) {
     console.error('error handling request:', request)
@@ -68,6 +70,12 @@ class Handler {
   }
 
   async handle() {
+    const static_url = this.env.config.get_static_file(this.url.pathname)
+    if (static_url) {
+      console.log('static path, proxying request to:', static_url)
+      return fetch(static_url, this.request)
+    }
+
     this.route_match = this.env.config.find_route(this.url.pathname)
     if (!this.route_match) {
       console.warn('no route found, returning 404, URL:', this.url)
