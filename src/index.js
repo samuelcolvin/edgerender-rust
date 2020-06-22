@@ -12,7 +12,7 @@ async function wrap_error(request, config_url) {
     console.error('error handling request:', request)
     console.error('config_url:', config_url)
     console.error('error:', e)
-    return new Response(`\nError occurred:\n\n  ${e.message}\n`, {
+    return new Response(`\nError occurred:\n\n${e.message}\n`, {
       status: 500,
       headers: {'content-type': 'text/plain'},
     })
@@ -29,6 +29,14 @@ async function handle(request, config_url) {
   const templates = await load_templates_s3(config)
   console.log('templates:', templates)
 
+  const url = new URL(request.url)
+  const route_match = config.find_route(url.pathname)
+  if (!route_match) {
+    console.warn('no route found, returning 404, URL:', url)
+    return new Response('404 No route found', {status: 404})
+  }
+  console.log('route_match:', route_match)
+
   if (!ENV || DEBUG) {
     try {
       ENV = create_env(templates)
@@ -42,26 +50,85 @@ async function handle(request, config_url) {
       }
     }
   }
-
-  const context = {
-    title: 'This is working!',
-    date: new Date(),
-    items: {
-      Foo: 'Bar',
-      Apple: 'Pie',
-    },
+  let upstream_json = null
+  let upstream = null
+  const response_headers = {'content-type': 'text/html'}
+  let response_status
+  if (route_match.upstream) {
+    const v = await get_upstream(route_match, config, request)
+    if (v.upstream_json) {
+      upstream_json = v.upstream_json
+      upstream = v.upstream
+      response_status = v.response_status
+      Object.assign(response_headers, v.response_headers)
+    } else {
+      // this is a raw response
+      return v
+    }
+  } else {
+    response_status = route_match.response_status || 200
+    console.log('no upstream path for route, not getting upstream data, returning with status:', response_status)
   }
 
   let html
   try {
-    html = ENV.render(config, 'main.jinja', JSON.stringify(context))
+    html = ENV.render(config, route_match, upstream_json, response_status, upstream)
   } catch (e) {
     console.warn('error rendering template:', e)
     return new Response(`Rendering Error\n\n${e.message}`, {status: 502})
   }
 
-  return new Response(html, {
-    status: 200,
-    headers: {'content-type': 'text/html'},
-  })
+  return new Response(html, {status: response_status, headers: response_headers})
 }
+
+
+async function get_upstream(route_match, config, request) {
+  let upstream_url
+  if (route_match.upstream.match(/^https?:\/\//)) {
+    upstream_url = route_match.upstream
+  } else {
+    upstream_url = config.upstream_root.replace(/\/$/, '') + '/' + route_match.upstream.replace(/^\//, '')
+  }
+  const request_url = new URL(request.url)
+  if (request_url.search.length > 1){
+    upstream_url += (upstream_url.includes('?') ? '&' : '?') + request_url.search.substr(1)
+  }
+  console.log('getting data from:', upstream_url)
+  const r = await fetch(upstream_url, request)
+  if (r.status >= 500) {
+    let text = await r.text()
+    const info = {response: r, headers: get_headers(r), body: text}
+    console.warn(`upstream error ${r.status}:`, info)
+    return new Response(`Error getting upstream response:\n${text}`, {status: 502})
+  }
+  let ct = r.headers.get('content-type') || ''
+  if (!ct.startsWith('application/json')) {
+    console.log(`non-JSON response (content-type: "${ct}"), returning raw`, r)
+    return r
+  }
+  const upstream_json = await r.text()
+  const upstream = {
+    url: upstream_url,
+    status: r.status,
+    headers: get_headers(r),
+  }
+  const response_status = route_match.response_status || r.status
+  const response_headers = {}
+
+  // copy specific headers to response TODO: anymore?
+  for (let h of ['cookie', 'set-cookie']) {
+    let v = r.headers.get(h)
+    if (v) {
+      response_headers[h] = v
+    }
+  }
+  console.log(`got JSON response from upstream, rendering`, {upstream_json, upstream, response_status})
+  return {
+    upstream_json,
+    upstream,
+    response_status,
+    response_headers,
+  }
+}
+
+const get_headers = r => Object.assign(...Array.from(r.headers.entries()).map(([k, v]) => ({[k]: v})))
