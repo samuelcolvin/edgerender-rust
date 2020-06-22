@@ -15,7 +15,7 @@ async function wrap_error(request, config_url, cache_flush_key) {
     console.error('error handling request:', request)
     console.error('config_url:', config_url)
     console.error('error:', e)
-    return new Response(`\nError occurred:\n\n${e.message}\n`, {status: 500})
+    return new Response(`\nError occurred:\n\n${e.message}\n${e.stack}\n`, {status: 500})
   }
 }
 
@@ -27,23 +27,33 @@ async function handle_request(request, config_url, cache_flush_key) {
     console.log(`flushing ${cache_count} cache keys:`, cache_keys)
     await Promise.all(cache_keys.keys.map(k => CACHE.delete(k.name)))
     ENV = null
-    await get_env(request, config_url, cache_flush_key)
+    await get_env(request, config_url)
     return new Response(`flushed ${cache_count} items from the cache and rebuilt`, {status: 201})
   } else {
-    const env = await get_env(request, config_url, cache_flush_key)
-    return await new Handler(env, request).handle()
+    const {env, cache_state} = await get_env(request, config_url)
+    return await new Handler(env, request, cache_state).handle()
   }
 }
 
 let ENV = null
 
-async function get_env(request, config_url, cache_flush_key) {
-  if (ENV) {
+async function get_env(request, config_url) {
+  // THIS makes sure old ENVs don't continue to be used after the KV cache has been flushed
+  let cache_state = 'miss'
+  let cache_ts = await CACHE.get('ts')
+  if (cache_ts) {
+    cache_state = 'hit-kv'
+  } else {
+    cache_ts = new Date().getTime().toString()
+    await CACHE.put('ts', cache_ts)
+  }
+  if (ENV && ENV.cache_ts === cache_ts) {
     console.log('reusing existing ENV', ENV)
+    cache_state = 'hit-memory'
   } else {
     ENV = await new Env().load(config_url)
   }
-  return ENV
+  return {cache_state, env: ENV}
 }
 
 class Env {
@@ -53,7 +63,8 @@ class Env {
     this.get_static_file = this.get_static_file.bind(this)
   }
 
-  async load(config_url) {
+  async load(config_url, cache_ts) {
+    this.cache_ts = cache_ts
     const {parse_config, create_env} = await import('../edgerender-pkg')
     this.config = await load_config(config_url, parse_config)
     console.log('config:', this.config)
@@ -72,11 +83,6 @@ class Env {
       }
     }
 
-    this.cache_ts = await CACHE.get('ts')
-    if (!this.cache_ts) {
-      this.cache_ts = new Date().getTime().toString()
-      await CACHE.put('ts', this.cache_ts)
-    }
     return this
   }
 
@@ -93,13 +99,13 @@ class Env {
 }
 
 class Handler {
-  constructor(env, request) {
+  constructor(env, request, cache_state) {
     this.env = env
     this.request = request
     this.url = new URL(request.url)
     this.upstream_json = null
     this.upstream = null
-    this.response_headers = {'content-type': 'text/html'}
+    this.response_headers = {'content-type': 'text/html', 'edgerender-cache-state': cache_state}
     this.response_status = null
     this.handle = this.handle.bind(this)
     this._get_upstream = this._get_upstream.bind(this)
