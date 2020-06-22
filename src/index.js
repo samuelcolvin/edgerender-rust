@@ -22,13 +22,17 @@ async function wrap_error(request, config_url, cache_flush_key) {
 async function handle_request(request, config_url, cache_flush_key) {
   if (request.method === 'POST' && new URL(request.url).pathname === `/.cache/flush/${cache_flush_key}`) {
     // NOTE: this doesn't take care of the case where list_complete is false and we need to use a cursor
-    const cache_keys = await CACHE.list()
-    const cache_count = cache_keys.keys.length
-    console.log(`flushing ${cache_count} cache keys:`, cache_keys)
+    let [cache_keys, cache_ts] = await Promise.all([CACHE.list(), CACHE.get('ts')])
+    const key_count = cache_keys.keys.length
+    if (cache_ts) {
+      cache_ts = new Date(cache_ts)
+    }
+    console.log(`flushing cache key_count=${key_count} cache_timestamp=${cache_ts} keys=`, cache_keys)
     await Promise.all(cache_keys.keys.map(k => CACHE.delete(k.name)))
     ENV = null
     await get_env(request, config_url)
-    return new Response(`flushed ${cache_count} items from the cache and rebuilt`, {status: 201})
+    const msg = `flushed cache and rebuilt, key_count=${key_count} cache_timestamp=${cache_ts}`
+    return new Response(msg, {status: 201})
   } else {
     const {env, cache_state} = await get_env(request, config_url)
     return await new Handler(env, request, cache_state).handle()
@@ -51,7 +55,7 @@ async function get_env(request, config_url) {
     console.log('reusing existing ENV', ENV)
     cache_state = 'hit-memory'
   } else {
-    ENV = await new Env().load(config_url)
+    ENV = await new Env().load(config_url, cache_ts)
   }
   return {cache_state, env: ENV}
 }
@@ -105,7 +109,11 @@ class Handler {
     this.url = new URL(request.url)
     this.upstream_json = null
     this.upstream = null
-    this.response_headers = {'content-type': 'text/html', 'edgerender-cache-state': cache_state}
+    this.response_headers = {
+      'content-type': 'text/html',
+      'edgerender-cache-state': cache_state,
+      'edgerender-cache-ts': new Date(parseInt(env.cache_ts)).toString(),
+    }
     this.response_status = null
     this.handle = this.handle.bind(this)
     this._get_upstream = this._get_upstream.bind(this)
