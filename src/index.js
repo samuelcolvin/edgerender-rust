@@ -55,36 +55,16 @@ async function handle(request, config_url) {
   const response_headers = {'content-type': 'text/html'}
   let response_status
   if (route_match.upstream) {
-    const upstream_url = config.upstream_root + route_match.upstream
-    console.log('getting data from:', upstream_url)
-    const r = await fetch(upstream_url, request)
-    if (r.status >= 500) {
-      let text = await r.text()
-      const info = {response: r, headers: get_headers(r), body: text}
-      console.warn(`upstream error ${r.status}:`, info)
-      return new Response(`Error getting upstream response:\n${text}`, {status: 502})
+    const v = await get_upstream(route_match, config, request)
+    if (v.upstream_json) {
+      upstream_json = v.upstream_json
+      upstream = v.upstream
+      response_status = v.response_status
+      Object.assign(response_headers, v.response_headers)
+    } else {
+      // this is a raw response
+      return v
     }
-    let ct = r.headers.get('content-type') || ''
-    if (!ct.startsWith('application/json')) {
-      console.log(`non-JSON response (content-type: "${ct}"), returning raw`, r)
-      return r
-    }
-    upstream_json = await r.text()
-    upstream = {
-      url: upstream_url,
-      status: r.status,
-      headers: get_headers(r),
-    }
-    response_status = route_match.response_status || r.status
-
-    // copy specific headers to response TODO: anymore?
-    for (let h of ['cookie', 'set-cookie']) {
-      let v = r.headers.get(h)
-      if (v) {
-        response_headers[h] = v
-      }
-    }
-    console.log(`got JSON response from upstream, rendering`, {upstream_json, upstream, response_status})
   } else {
     response_status = route_match.response_status || 200
     console.log('no upstream path for route, not getting upstream data, returning with status:', response_status)
@@ -99,6 +79,56 @@ async function handle(request, config_url) {
   }
 
   return new Response(html, {status: response_status, headers: response_headers})
+}
+
+
+async function get_upstream(route_match, config, request) {
+  let upstream_url
+  if (route_match.upstream.match(/^https?:\/\//)) {
+    upstream_url = route_match.upstream
+  } else {
+    upstream_url = config.upstream_root.replace(/\/$/, '') + '/' + route_match.upstream.replace(/^\//, '')
+  }
+  const request_url = new URL(request.url)
+  if (request_url.search.length > 1){
+    upstream_url += (upstream_url.includes('?') ? '&' : '?') + request_url.search.substr(1)
+  }
+  console.log('getting data from:', upstream_url)
+  const r = await fetch(upstream_url, request)
+  if (r.status >= 500) {
+    let text = await r.text()
+    const info = {response: r, headers: get_headers(r), body: text}
+    console.warn(`upstream error ${r.status}:`, info)
+    return new Response(`Error getting upstream response:\n${text}`, {status: 502})
+  }
+  let ct = r.headers.get('content-type') || ''
+  if (!ct.startsWith('application/json')) {
+    console.log(`non-JSON response (content-type: "${ct}"), returning raw`, r)
+    return r
+  }
+  const upstream_json = await r.text()
+  const upstream = {
+    url: upstream_url,
+    status: r.status,
+    headers: get_headers(r),
+  }
+  const response_status = route_match.response_status || r.status
+  const response_headers = {}
+
+  // copy specific headers to response TODO: anymore?
+  for (let h of ['cookie', 'set-cookie']) {
+    let v = r.headers.get(h)
+    if (v) {
+      response_headers[h] = v
+    }
+  }
+  console.log(`got JSON response from upstream, rendering`, {upstream_json, upstream, response_status})
+  return {
+    upstream_json,
+    upstream,
+    response_status,
+    response_headers,
+  }
 }
 
 const get_headers = r => Object.assign(...Array.from(r.headers.entries()).map(([k, v]) => ({[k]: v})))
