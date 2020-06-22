@@ -29,6 +29,14 @@ async function handle(request, config_url) {
   const templates = await load_templates_s3(config)
   console.log('templates:', templates)
 
+  const url = new URL(request.url)
+  const route_match = config.find_route(url.pathname)
+  if (!route_match) {
+    console.warn('no route found, returning 404, URL:', url)
+    return new Response('404 No route found', {status: 404})
+  }
+  console.log('route_match:', route_match)
+
   if (!ENV || DEBUG) {
     try {
       ENV = create_env(templates)
@@ -42,30 +50,24 @@ async function handle(request, config_url) {
       }
     }
   }
-
-  const url = new URL(request.url)
-  const route = config.find_route(url.pathname)
-  console.log('route:', route)
-
-  const context = {
-    title: 'This is working!',
-    date: new Date(),
-    items: {
-      Foo: 'Bar',
-      Apple: 'Pie',
-    },
+  let context = null
+  if (route_match.endpoint) {
+    const upstream_url = config.upstream + route_match.endpoint
+    console.log('getting data from', upstream_url)
+    const r = await fetch(upstream_url, request)
+    context = await r.text()
   }
 
   let html
   try {
-    html = ENV.render(config, 'main.jinja', JSON.stringify(context))
+    html = ENV.render(config, route_match, context)
   } catch (e) {
     console.warn('error rendering template:', e)
     return new Response(`Rendering Error\n\n${e.message}`, {status: 502})
   }
 
   return new Response(html, {
-    status: 200,
+    status: route_match.status,
     headers: {'content-type': 'text/html'},
   })
 }

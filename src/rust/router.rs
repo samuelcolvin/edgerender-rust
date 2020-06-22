@@ -5,6 +5,7 @@ use serde::{Serialize, Deserialize};
 use serde::ser::Serializer;
 use serde::de::{Deserializer, Visitor, Error as SerdeError};
 use regex::{Regex, Captures};
+use tera::Context;
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -75,7 +76,7 @@ pub struct Route {
     context: Option<BTreeMap<String, Value>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RouteMatch {
     pub route_index: usize,
     pub variables: BTreeMap<String, String>,
@@ -85,8 +86,19 @@ pub struct RouteMatch {
     pub context: Option<BTreeMap<String, Value>>,
 }
 
+impl RouteMatch {
+    pub fn add_context(&self, target: &mut Context) {
+        if let Some(context) = &self.context {
+            for (key, value) in context {
+                target.insert(key, &value);
+            }
+        }
+    }
+}
+
+
 impl Route {
-    pub fn try_match(&self, route_index: usize, path: &str) -> Option<RouteMatch> {
+    pub fn maybe_match(&self, route_index: usize, path: &str) -> Option<RouteMatch> {
         if let Some(cap) = self.match_re.captures(path) {
             let mut variables: BTreeMap<String, String> = BTreeMap::new();
             for op_name in self.match_re.capture_names() {
@@ -113,9 +125,17 @@ impl Route {
     fn get_endpoint(&self, variables: &BTreeMap<String, String>) -> Option<String> {
         if let Some(route_endpoint) = &self.endpoint {
             let mut endpoint_str = route_endpoint.clone();
+            let has_vars = endpoint_str.contains("{vars}");
+            let mut vars = Vec::<String>::new();
             for (name, value) in variables {
                 let rep = format!("{{{}}}", name);
                 endpoint_str = endpoint_str.replace(&rep, &value);
+                if has_vars {
+                    vars.push(format!("{}={}", name, value));
+                }
+            }
+            if has_vars {
+                endpoint_str = endpoint_str.replace("{vars}", &vars.join("&"));
             }
             Some(endpoint_str)
         } else {
@@ -127,7 +147,7 @@ impl Route {
 
 pub fn find_route(routes: &Vec<Route>, path: &str) -> Option<RouteMatch> {
     for (i, route) in routes.iter().enumerate() {
-        if let Some(route_match) = route.try_match(i, path) {
+        if let Some(route_match) = route.maybe_match(i, path) {
             return Some(route_match)
         }
     }

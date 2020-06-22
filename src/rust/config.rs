@@ -46,10 +46,14 @@ impl Config {
     }
 
     #[wasm_bindgen(getter)]
+    pub fn default_template(&self) -> String { self.default_template.clone() }
+
+    #[wasm_bindgen(getter)]
     pub fn template_prefix(&self) -> String { self.template_prefix.clone() }
 
     #[wasm_bindgen(getter)]
     pub fn template_root(&self) -> String {
+        // replace with or_else
         match self.template_root.clone() {
             Some(v) => v,
             None => self.template_root_default.clone(),
@@ -75,6 +79,8 @@ impl Config {
             }
         }
     }
+
+    pub fn get_default_template(&self) -> String { self.default_template.clone() }
 }
 
 #[wasm_bindgen]

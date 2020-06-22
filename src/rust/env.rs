@@ -5,6 +5,7 @@ use serde::Deserialize;
 use tera::{Tera, Context, Result as TeraResult};
 use serde_json::{Value, to_string_pretty};
 use crate::config::Config;
+use crate::router::RouteMatch;
 
 #[derive(Deserialize)]
 pub struct Template {
@@ -19,22 +20,52 @@ pub struct Env {
 
 #[wasm_bindgen]
 impl Env {
-    pub fn render(&self, config: &Config, template_name: &str, context_json: &str) -> Result<String, JsValue> {
-        let context_value: Value = match serde_json::from_str(context_json) {
-            Err(e) => return err!("Error parsing context JSON: {:?}", e),
+    pub fn render(&self, config: &Config, route_match: &JsValue, context_json: Option<String>) -> Result<String, JsValue> {
+        let route_match_: RouteMatch = match route_match.into_serde() {
+            Err(e) => return err!("route_match not a valid RouteMatch object: {:?}", e),
             Ok(v) => v,
         };
-        let mut template_context = match Context::from_value(context_value) {
-            Err(e) => return err!("Error building tera context: {:?}", e),
-            Ok(v) => v,
-        };
+        let mut template_context;
+        if let Some(s) = context_json {
+            let context_value: Value = match serde_json::from_str(&s) {
+                Err(e) => return err!("Error parsing context JSON: {:?}", e),
+                Ok(v) => v,
+            };
+            template_context = match Context::from_value(context_value) {
+                Err(e) => return err!("Error building tera context: {:?}", e),
+                Ok(v) => v,
+            };
+        } else {
+            template_context = Context::new();
+        }
         config.add_context(&mut template_context);
-        match self.tera.render(template_name, &template_context) {
-            Err(e) => err!("Error rendering template {}: {:?}", template_name, e),
+        route_match_.add_context(&mut template_context);
+
+        let template_name = match route_match_.template {
+            Some(v) => v,
+            None => config.get_default_template()
+        };
+        match self.tera.render(&template_name, &template_context) {
+            Err(e) => err!("Error rendering template {}: {:?}", &template_name, e),
             Ok(v) => Ok(v),
         }
     }
 }
+//
+// fn get_context(context_json: Option<&str>) -> Context{
+//     if let Some(s) = context_json {
+//         let context_value: Value = match serde_json::from_str(context_json) {
+//             Err(e) => return err!("Error parsing context JSON: {:?}", e),
+//             Ok(v) => v,
+//         };
+//         match Context::from_value(context_value) {
+//             Err(e) => return err!("Error building tera context: {:?}", e),
+//             Ok(v) => v,
+//         }
+//     } else {
+//         Context::new()
+//     }
+// }
 
 fn to_json(obj: &Value, args: &HashMap<String, Value>) -> TeraResult<Value> {
     let pretty: bool = match args.get("pretty") {
