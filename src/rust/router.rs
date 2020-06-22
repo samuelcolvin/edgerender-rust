@@ -41,7 +41,12 @@ where
             E: SerdeError,
         {
             if value.starts_with("/") {
-                let router_re_str = format!(r"^{}$", VARIABLE_REGEX.replace_all(value, replace_variable));
+                let mut router_re_str: String = "^".to_string();
+                router_re_str.push_str(&VARIABLE_REGEX.replace_all(value, replace_variable));
+                router_re_str.push_str(match router_re_str.ends_with('/') {
+                    true => "?$",
+                    false => "/?$",
+                });
                 return Regex::new(&router_re_str).map_err(SerdeError::custom)
             } else {
                 return Err(SerdeError::custom("route matches must start with a forward slash '/'"))
@@ -59,20 +64,15 @@ where
     s.serialize_str(&format!("{:?}", regex))
 }
 
-fn default_response_status() -> u32 {
-    200
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Route {
     #[serde(deserialize_with = "string_to_regex")]
     #[serde(serialize_with = "regex_to_string")]
     #[serde(rename = "match")]
     match_re: Regex,
-    #[serde(default = "default_response_status")]
-    response_status: u32,
+    response_status: Option<u32>,
     template: Option<String>,
-    endpoint: Option<String>,
+    upstream: Option<String>,
     context: Option<BTreeMap<String, Value>>,
 }
 
@@ -80,9 +80,9 @@ pub struct Route {
 pub struct RouteMatch {
     pub route_index: usize,
     pub variables: BTreeMap<String, String>,
-    pub response_status: u32,
+    pub response_status: Option<u32>,
     pub template: Option<String>,
-    pub endpoint: Option<String>,
+    pub upstream: Option<String>,
     pub context: Option<BTreeMap<String, Value>>,
 }
 
@@ -108,13 +108,13 @@ impl Route {
                     }
                 }
             }
-            let endpoint = self.get_endpoint(&variables);
+            let upstream = self.get_upstream(&variables);
             Some(RouteMatch {
                 route_index,
                 variables,
                 response_status: self.response_status,
                 template: self.template.clone(),
-                endpoint,
+                upstream,
                 context: self.context.clone(),
             })
         } else {
@@ -122,22 +122,22 @@ impl Route {
         }
     }
 
-    fn get_endpoint(&self, variables: &BTreeMap<String, String>) -> Option<String> {
-        if let Some(route_endpoint) = &self.endpoint {
-            let mut endpoint_str = route_endpoint.clone();
-            let has_vars = endpoint_str.contains("{vars}");
+    fn get_upstream(&self, variables: &BTreeMap<String, String>) -> Option<String> {
+        if let Some(route_upstream) = &self.upstream {
+            let mut upstream_str = route_upstream.clone();
+            let has_vars = upstream_str.contains("{vars}");
             let mut vars = Vec::<String>::new();
             for (name, value) in variables {
                 let rep = format!("{{{}}}", name);
-                endpoint_str = endpoint_str.replace(&rep, &value);
+                upstream_str = upstream_str.replace(&rep, &value);
                 if has_vars {
                     vars.push(format!("{}={}", name, value));
                 }
             }
             if has_vars {
-                endpoint_str = endpoint_str.replace("{vars}", &vars.join("&"));
+                upstream_str = upstream_str.replace("{vars}", &vars.join("&"));
             }
-            Some(endpoint_str)
+            Some(upstream_str)
         } else {
             None
         }

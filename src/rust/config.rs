@@ -19,7 +19,7 @@ fn default_template() -> String {
 pub struct Config {
     #[serde(skip)]
     url: String,
-    upstream: String,
+    upstream_root: String,
     routes: Vec<Route>,
     #[serde(default = "default_template")]
     default_template: String,
@@ -38,7 +38,7 @@ impl Config {
     pub fn url(&self) -> String { self.url.clone() }
 
     #[wasm_bindgen(getter)]
-    pub fn upstream(&self) -> String { self.upstream.clone() }
+    pub fn upstream_root(&self) -> String { self.upstream_root.clone() }
 
     #[wasm_bindgen(getter)]
     pub fn routes(&self) -> JsValue {

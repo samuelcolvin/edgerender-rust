@@ -50,24 +50,41 @@ async function handle(request, config_url) {
       }
     }
   }
-  let context = null
-  if (route_match.endpoint) {
-    const upstream_url = config.upstream + route_match.endpoint
-    console.log('getting data from', upstream_url)
+  let raw_json = null
+  let response_status
+  if (route_match.upstream) {
+    const upstream_url = new URL(config.upstream_root)
+    upstream_url.pathname = route_match.upstream
+    console.log(`getting data from: ${upstream_url}`)
     const r = await fetch(upstream_url, request)
-    context = await r.text()
+    if (r.status >= 500) {
+      let text = await r.text()
+      console.warn(`upstream error ${r.status}:`, r, text)
+      return new Response(`Error getting upstream response:\n${text}`, {status: 502})
+    }
+    let ct = r.headers.get('content-type') || ''
+    if (!ct.startsWith('application/json')) {
+      console.log(`non-JSON response (content-type: "${ct}"), returning raw`, r)
+      return r
+    }
+    raw_json = await r.text()
+    response_status = route_match.response_status || r.status
+    console.log(`got JSON response, returning with status ${response_status}, JSON:`, {raw_json})
+  } else {
+    response_status = route_match.response_status || 200
+    console.log('no upstream path for route, not getting upstream data, returning with status:', response_status)
   }
 
   let html
   try {
-    html = ENV.render(config, route_match, context)
+    html = ENV.render(config, route_match, raw_json)
   } catch (e) {
     console.warn('error rendering template:', e)
     return new Response(`Rendering Error\n\n${e.message}`, {status: 502})
   }
 
   return new Response(html, {
-    status: route_match.status,
+    status: response_status,
     headers: {'content-type': 'text/html'},
   })
 }
