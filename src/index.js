@@ -51,6 +51,8 @@ async function handle(request, config_url) {
     }
   }
   let upstream_json = null
+  let upstream = null
+  const response_headers = {'content-type': 'text/html'}
   let response_status
   if (route_match.upstream) {
     const upstream_url = new URL(config.upstream_root)
@@ -59,7 +61,8 @@ async function handle(request, config_url) {
     const r = await fetch(upstream_url, request)
     if (r.status >= 500) {
       let text = await r.text()
-      console.warn(`upstream error ${r.status}:`, r, text)
+      const info = {response: r, headers: get_headers(r), body: text}
+      console.warn(`upstream error ${r.status}:`, info)
       return new Response(`Error getting upstream response:\n${text}`, {status: 502})
     }
     let ct = r.headers.get('content-type') || ''
@@ -68,8 +71,21 @@ async function handle(request, config_url) {
       return r
     }
     upstream_json = await r.text()
+    upstream = {
+      url: upstream_url.toString(),
+      status: r.status,
+      headers: get_headers(r),
+    }
     response_status = route_match.response_status || r.status
-    console.log(`got JSON response, returning with status ${response_status}, JSON:`, {upstream_json})
+
+    // copy specific headers to response TODO: anymore?
+    for (let h of ['cookie', 'set-cookie']) {
+      let v = r.headers.get(h)
+      if (v) {
+        response_headers[h] = v
+      }
+    }
+    console.log(`got JSON response from upstream, rendering`, {upstream_json, upstream, response_status})
   } else {
     response_status = route_match.response_status || 200
     console.log('no upstream path for route, not getting upstream data, returning with status:', response_status)
@@ -77,14 +93,13 @@ async function handle(request, config_url) {
 
   let html
   try {
-    html = ENV.render(config, route_match, upstream_json)
+    html = ENV.render(config, route_match, upstream_json, response_status, upstream)
   } catch (e) {
     console.warn('error rendering template:', e)
     return new Response(`Rendering Error\n\n${e.message}`, {status: 502})
   }
 
-  return new Response(html, {
-    status: response_status,
-    headers: {'content-type': 'text/html'},
-  })
+  return new Response(html, {status: response_status, headers: response_headers})
 }
+
+const get_headers = r => Object.assign(...Array.from(r.headers.entries()).map(([k, v]) => ({[k]: v})))
