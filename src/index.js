@@ -1,33 +1,56 @@
 import {load_config, load_templates_s3} from './config'
 
-export default function(event, config_url) {
-  return event.respondWith(wrap_error(event.request, config_url))
+export default function(event, config_url, cache_flush_key) {
+  return event.respondWith(wrap_error(event.request, config_url, cache_flush_key))
 }
 
-let ENV = null
-
-async function wrap_error(request, config_url) {
+async function wrap_error(request, config_url, cache_flush_key) {
   console.log(`${request.method} ${request.url}`)
+  if (request.url.endsWith('skip-loading-wasm')) {
+    return new Response('skipped wasm, direct response')
+  }
   try {
-    if (!ENV) {
-      ENV = await new Env().load(config_url)
-    }
-    return await new Handler(ENV, request).handle()
+    return await handle_request(request, config_url, cache_flush_key)
   } catch (e) {
     console.error('error handling request:', request)
     console.error('config_url:', config_url)
     console.error('error:', e)
-    return new Response(`\nError occurred:\n\n${e.message}\n`, {
-      status: 500,
-      headers: {'content-type': 'text/plain'},
-    })
+    return new Response(`\nError occurred:\n\n${e.message}\n`, {status: 500})
   }
+}
+
+async function handle_request(request, config_url, cache_flush_key) {
+  if (request.method === 'POST' && new URL(request.url).pathname === `/.cache/flush/${cache_flush_key}`) {
+    // NOTE: this doesn't take care of the case where list_complete is false and we need to use a cursor
+    const cache_keys = await CACHE.list()
+    const cache_count = cache_keys.keys.length
+    console.log(`flushing ${cache_count} cache keys:`, cache_keys)
+    await Promise.all(cache_keys.keys.map(k => CACHE.delete(k.name)))
+    ENV = null
+    await get_env(request, config_url, cache_flush_key)
+    return new Response(`flushed ${cache_count} items from the cache and rebuilt`, {status: 201})
+  } else {
+    const env = await get_env(request, config_url, cache_flush_key)
+    return await new Handler(env, request).handle()
+  }
+}
+
+let ENV = null
+
+async function get_env(request, config_url, cache_flush_key) {
+  if (ENV) {
+    console.log('reusing existing ENV', ENV)
+  } else {
+    ENV = await new Env().load(config_url)
+  }
+  return ENV
 }
 
 class Env {
   constructor() {
     this.load = this.load.bind(this)
     this.render = this.render.bind(this)
+    this.get_static_file = this.get_static_file.bind(this)
   }
 
   async load(config_url) {
