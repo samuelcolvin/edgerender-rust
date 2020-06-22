@@ -5,3 +5,7 @@ workers_dev = true
 route = ""
 zone_id = ""
 webpack_config = "webpack.config.js"
+
+kv_namespaces = [
+   { binding = "CACHE", id = "6756f784da8749bf9d2bb0440dd88852" }
+]

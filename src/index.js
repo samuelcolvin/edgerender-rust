@@ -48,11 +48,24 @@ class Env {
         throw e
       }
     }
+
+    this.cache_ts = await CACHE.get('ts')
+    if (!this.cache_ts) {
+      this.cache_ts = new Date().getTime().toString()
+      await CACHE.put('ts', this.cache_ts)
+    }
     return this
   }
 
   render(route_match, upstream_json, response_status, upstream) {
     return this._rust_env.render(this.config, route_match, upstream_json, response_status, upstream)
+  }
+
+  get_static_file(pathname) {
+    const static_url = this.config.get_static_file(pathname)
+    if (static_url) {
+      return `${static_url}${static_url.includes('?') ? '&' : '?'}ts=${this.cache_ts}`
+    }
   }
 }
 
@@ -70,7 +83,7 @@ class Handler {
   }
 
   async handle() {
-    const static_url = this.env.config.get_static_file(this.url.pathname)
+    const static_url = this.env.get_static_file(this.url.pathname)
     if (static_url) {
       console.log('static path, proxying request to:', static_url)
       return fetch(static_url, this.request)
