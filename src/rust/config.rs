@@ -4,13 +4,10 @@ use serde_json::Value;
 use serde_derive::Deserialize;
 use js_sys::Error;
 use tera::Context;
+use crate::router::{Route, default_template, default_context};
 
-fn default_templates() -> String {
+fn default_templates_prefix() -> String {
     "templates".to_string()
-}
-
-fn default_context() -> BTreeMap<String, Value> {
-    BTreeMap::new()
 }
 
 #[wasm_bindgen]
@@ -19,7 +16,10 @@ pub struct Config {
     #[serde(skip)]
     url: String,
     upstream: String,
-    #[serde(default = "default_templates")]
+    routes: Vec<Route>,
+    #[serde(default = "default_template")]
+    default_template: String,
+    #[serde(default = "default_templates_prefix")]
     template_prefix: String,
     #[serde(skip)]
     template_root: Option<String>,
@@ -36,6 +36,11 @@ impl Config {
 
     #[wasm_bindgen(getter)]
     pub fn upstream(&self) -> String { self.upstream.clone() }
+
+    #[wasm_bindgen(getter)]
+    pub fn routes(&self) -> JsValue {
+        JsValue::from_serde(&self.routes).unwrap()
+    }
 
     #[wasm_bindgen(getter)]
     pub fn template_prefix(&self) -> String { self.template_prefix.clone() }
