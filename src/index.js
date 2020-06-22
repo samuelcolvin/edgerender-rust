@@ -72,7 +72,7 @@ class Handler {
   async handle() {
     const static_url = this.env.config.get_static_file(this.url.pathname)
     if (static_url) {
-      console.log('request for static file, returning:', static_url)
+      console.log('static path, proxying request to:', static_url)
       return fetch(static_url, this.request)
     }
 
