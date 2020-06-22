@@ -12,7 +12,7 @@ async function wrap_error(request, config_url) {
     console.error('error handling request:', request)
     console.error('config_url:', config_url)
     console.error('error:', e)
-    return new Response(`\nError occurred:\n\n  ${e.message}\n`, {
+    return new Response(`\nError occurred:\n\n${e.message}\n`, {
       status: 500,
       headers: {'content-type': 'text/plain'},
     })
@@ -42,6 +42,10 @@ async function handle(request, config_url) {
       }
     }
   }
+
+  const url = new URL(request.url)
+  const route = config.find_route(url.pathname)
+  console.log('route:', route)
 
   const context = {
     title: 'This is working!',

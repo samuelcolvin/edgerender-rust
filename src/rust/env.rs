@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 use js_sys::{Error, SyntaxError};
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use tera::{Tera, Context, Result as TeraResult};
 use serde_json::{Value, to_string_pretty};
 use crate::config::Config;

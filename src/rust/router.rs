@@ -22,23 +22,6 @@ fn replace_variable(caps: &Captures) -> String {
     }
 }
 
-fn build_route_re(route_str: &str) -> Result<Regex, String> {
-    let router_re_str = format!(r"^{}$", VARIABLE_REGEX.replace_all(route_str, replace_variable));
-    match Regex::new(&router_re_str) {
-        Err(e) => Err(format!("error parsing router regex: {}", e)),
-        Ok(r) => Ok(r)
-    }
-}
-
-
-pub fn default_template() -> String {
-    "main.jinja".to_string()
-}
-
-pub fn default_context() -> BTreeMap<String, Value> {
-    BTreeMap::new()
-}
-
 fn string_to_regex<'de, D>(deserializer: D) -> Result<Regex, D::Error>
 where
     D: Deserializer<'de>,
@@ -56,7 +39,12 @@ where
         where
             E: SerdeError,
         {
-            Ok(build_route_re(value).unwrap())
+            if value.starts_with("/") {
+                let router_re_str = format!(r"^{}$", VARIABLE_REGEX.replace_all(value, replace_variable));
+                return Regex::new(&router_re_str).map_err(SerdeError::custom)
+            } else {
+                return Err(SerdeError::custom("route matches must start with a forward slash '/'"))
+            }
         }
     }
 
@@ -70,18 +58,78 @@ where
     s.serialize_str(&format!("{:?}", regex))
 }
 
+fn default_response_status() -> u32 {
+    200
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Route {
     #[serde(deserialize_with = "string_to_regex")]
     #[serde(serialize_with = "regex_to_string")]
     #[serde(rename = "match")]
     match_re: Regex,
-    #[serde(default = "default_template")]
-    template: String,
+    #[serde(default = "default_response_status")]
+    response_status: u32,
+    template: Option<String>,
     endpoint: Option<String>,
-    #[serde(default = "default_context")]
-    context: BTreeMap<String, Value>,
+    context: Option<BTreeMap<String, Value>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RouteMatch {
+    pub route_index: usize,
+    pub variables: BTreeMap<String, String>,
+    pub response_status: u32,
+    pub template: Option<String>,
+    pub endpoint: Option<String>,
+    pub context: Option<BTreeMap<String, Value>>,
+}
+
+impl Route {
+    pub fn try_match(&self, route_index: usize, path: &str) -> Option<RouteMatch> {
+        if let Some(cap) = self.match_re.captures(path) {
+            let mut variables: BTreeMap<String, String> = BTreeMap::new();
+            for op_name in self.match_re.capture_names() {
+                if let Some(name) = op_name {
+                    if let Some(m) = cap.name(name) {
+                        variables.insert(name.to_string(), m.as_str().to_string());
+                    }
+                }
+            }
+            let endpoint = self.get_endpoint(&variables);
+            Some(RouteMatch {
+                route_index,
+                variables,
+                response_status: self.response_status,
+                template: self.template.clone(),
+                endpoint,
+                context: self.context.clone(),
+            })
+        } else {
+            None
+        }
+    }
+
+    fn get_endpoint(&self, variables: &BTreeMap<String, String>) -> Option<String> {
+        if let Some(route_endpoint) = &self.endpoint {
+            let mut endpoint_str = route_endpoint.clone();
+            for (name, value) in variables {
+                let rep = format!("{{{}}}", name);
+                endpoint_str = endpoint_str.replace(&rep, &value);
+            }
+            Some(endpoint_str)
+        } else {
+            None
+        }
+    }
 }
 
 
-// pub fn find_route(routes: &Vec<>)
+pub fn find_route(routes: &Vec<Route>, path: &str) -> Option<RouteMatch> {
+    for (i, route) in routes.iter().enumerate() {
+        if let Some(route_match) = route.try_match(i, path) {
+            return Some(route_match)
+        }
+    }
+    None
+}

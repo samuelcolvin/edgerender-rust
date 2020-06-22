@@ -1,13 +1,17 @@
 use std::collections::BTreeMap;
 use wasm_bindgen::prelude::*;
 use serde_json::Value;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use js_sys::Error;
 use tera::Context;
-use crate::router::{Route, default_template, default_context};
+use crate::router::{Route, find_route};
 
 fn default_templates_prefix() -> String {
     "templates".to_string()
+}
+
+fn default_template() -> String {
+    "main.jinja".to_string()
 }
 
 #[wasm_bindgen]
@@ -25,8 +29,7 @@ pub struct Config {
     template_root: Option<String>,
     #[serde(skip)]
     template_root_default: String,
-    #[serde(default = "default_context")]
-    context: BTreeMap<String, Value>,
+    context: Option<BTreeMap<String, Value>>,
 }
 
 #[wasm_bindgen]
@@ -57,12 +60,19 @@ impl Config {
     pub fn context(&self) -> JsValue {
         JsValue::from_serde(&self.context).unwrap()
     }
+
+    pub fn find_route(&self, path: String) -> JsValue {
+        let route_match = find_route(&self.routes, &path);
+        JsValue::from_serde(&route_match).unwrap()
+    }
 }
 
 impl Config {
     pub fn add_context(&self, target: &mut Context) {
-        for (key, value) in &self.context {
-            target.insert(key, &value);
+        if let Some(context) = &self.context {
+            for (key, value) in context {
+                target.insert(key, &value);
+            }
         }
     }
 }
@@ -70,7 +80,7 @@ impl Config {
 #[wasm_bindgen]
 pub fn parse_config(s: String, url: String, default_template_root: String) -> Result<Config, JsValue> {
     let mut config: Config = match serde_yaml::from_str(&s) {
-        Err(e) => return err!("Error loading config: {:?}", e),
+        Err(e) => return err!("Error loading config: {}", e),
         Ok(config) => config
     };
     config.url = url;
