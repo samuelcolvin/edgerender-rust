@@ -6,7 +6,7 @@
   "main": "index.js",
   "scripts": {
     "test": "wasm-pack test --chrome --headless",
-    "format": "prettier --write 'src/**/*.{js,css,json,md}'"
+    "format": "prettier --write 'src/**/*.{js,css,json,md}' && cargo fmt"
   },
   "author": "Samuel Colvin <s@muelcolvin.com>",
   "license": "MIT",

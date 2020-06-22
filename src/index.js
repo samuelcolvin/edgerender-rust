@@ -55,9 +55,8 @@ async function handle(request, config_url) {
   const response_headers = {'content-type': 'text/html'}
   let response_status
   if (route_match.upstream) {
-    const upstream_url = new URL(config.upstream_root)
-    upstream_url.pathname = route_match.upstream
-    console.log(`getting data from: ${upstream_url}`)
+    const upstream_url = config.upstream_root + route_match.upstream
+    console.log('getting data from:', upstream_url)
     const r = await fetch(upstream_url, request)
     if (r.status >= 500) {
       let text = await r.text()
@@ -72,7 +71,7 @@ async function handle(request, config_url) {
     }
     upstream_json = await r.text()
     upstream = {
-      url: upstream_url.toString(),
+      url: upstream_url,
       status: r.status,
       headers: get_headers(r),
     }
