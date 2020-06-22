@@ -1,7 +1,7 @@
 use crate::router::{find_route, Route};
+use js_sys::Error;
 use lazy_static::lazy_static;
 use regex::Regex;
-use js_sys::Error;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -29,19 +29,26 @@ fn default_static() -> String {
 pub struct Config {
     #[serde(skip)]
     url: String,
+
     upstream_root: String,
     routes: Vec<Route>,
+
     #[serde(default = "default_template")]
     default_template: String,
+
     #[serde(default = "default_templates_prefix")]
     template_prefix: String,
+
+    #[serde(rename = "template_root")]
+    template_root_custom: Option<String>,
     #[serde(skip)]
-    template_root: Option<String>,
-    #[serde(skip)]
-    config_origin: String,
+    template_root: String,
+
     context: Option<BTreeMap<String, Value>>,
+
     #[serde(default = "default_static")]
     static_path_prefix: String,
+
     #[serde(default = "default_static")]
     static_upstream: String,
     #[serde(skip)]
@@ -77,11 +84,7 @@ impl Config {
 
     #[wasm_bindgen(getter)]
     pub fn template_root(&self) -> String {
-        // replace with or_else
-        match self.template_root.clone() {
-            Some(v) => v,
-            None => self.config_origin.clone(),
-        }
+        self.template_root.clone()
     }
 
     #[wasm_bindgen(getter)]
@@ -101,7 +104,11 @@ impl Config {
 
     pub fn get_static_file(&self, pathname: String) -> Option<String> {
         if pathname.starts_with(&self.static_path_prefix) {
-            let url = format!("{}{}", &self.static_upstream_absolute, &pathname[self.static_path_prefix.len()..]);
+            let url = format!(
+                "{}{}",
+                &self.static_upstream_absolute,
+                &pathname[self.static_path_prefix.len()..]
+            );
             Some(url)
         } else {
             None
@@ -135,10 +142,13 @@ pub fn parse_config(s: String, url: String, config_origin: String) -> Result<Con
         Ok(config) => config,
     };
     config.url = url;
-    config.config_origin = config_origin;
     config.static_upstream_absolute = match HTTP_REGEX.is_match(&config.static_upstream) {
         true => config.static_upstream.clone(),
-        false => format!("{}{}", config.config_origin, config.static_upstream)
+        false => format!("{}{}", config_origin, config.static_upstream),
+    };
+    config.template_root = match config.template_root_custom.clone() {
+        Some(v) => v,
+        None => config_origin.clone(),
     };
     Ok(config)
 }
