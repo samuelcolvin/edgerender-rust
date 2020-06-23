@@ -1,6 +1,8 @@
-import {load_config, load_templates_s3} from './config'
+const CONFIG_URL = 'https://edgerender.s3-eu-west-1.amazonaws.com/edgerender.yaml'
+const CACHE_FLUSH_KEY = 'testing'
+addEventListener('fetch', e => edgerender(e, CONFIG_URL, CACHE_FLUSH_KEY))
 
-export default function(event, config_url, cache_flush_key) {
+function edgerender(event, config_url, cache_flush_key) {
   return event.respondWith(wrap_error(event.request, config_url, cache_flush_key))
 }
 
@@ -69,7 +71,9 @@ class Env {
 
   async load(config_url, cache_ts) {
     this.cache_ts = cache_ts
-    const {parse_config, create_env} = await import('../edgerender-pkg')
+    const {parse_config, create_env} = wasm_bindgen
+    await wasm_bindgen(wasm)
+    // const {parse_config, create_env} = await import('./pkg')
     this.config = await load_config(config_url, parse_config)
     console.log('config:', this.config)
     const templates = await load_templates_s3(this.config)
@@ -207,3 +211,43 @@ class Handler {
 }
 
 const get_headers = r => Object.assign(...Array.from(r.headers.entries()).map(([k, v]) => ({[k]: v})))
+
+async function load_config(config_url, parse_config) {
+  const content = await fetch_text(config_url)
+  const config_origin = `https://${new URL(config_url).hostname}`
+  return parse_config(content, config_url, config_origin)
+}
+
+async function load_templates_s3(config) {
+  const xml = await fetch_text(`${config.template_root}?list-type=2&prefix=${config.template_prefix}`)
+  const templates = []
+  const re = /<Key>(.+?)<\/Key>/g
+  let m
+  while ((m = re.exec(xml)) !== null) {
+    templates.push(m[1])
+  }
+
+  return await Promise.all(
+    templates.map(async t => ({
+      name: t.replace(new RegExp(`^${config.template_prefix}\/`), ''),
+      content: await fetch_text(`${config.template_root}/${t}`),
+    })),
+  )
+}
+
+async function fetch_text(url) {
+  const cache_value = await CACHE.get(url)
+  if (cache_value) {
+    console.debug('fetch-text cache HIT', url)
+    return cache_value
+  }
+  console.debug('fetch-text cache MISS', url)
+  const r = await fetch(`${url}${url.includes('?') ? '&' : '?'}ts=${new Date().getTime()}`)
+  if (r.status === 200) {
+    const text = await r.text()
+    await CACHE.put(url, text)
+    return text
+  } else {
+    throw Error(`unexpected response getting ${url}: ${r.status}`)
+  }
+}
