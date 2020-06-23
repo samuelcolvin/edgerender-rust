@@ -16,7 +16,6 @@ module.exports = {
     new CleanWebpackPlugin(),
     new WasmPackPlugin({
       crateDirectory: path.resolve(__dirname, '.'),
-      outDir: 'edgerender-pkg',
     }),
   ],
 }

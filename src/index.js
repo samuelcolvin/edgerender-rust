@@ -20,12 +20,12 @@ async function wrap_error(request, config_url, cache_flush_key) {
 }
 
 async function handle_request(request, config_url, cache_flush_key) {
-  if (request.method === 'POST' && new URL(request.url).pathname === `/.cache/flush/${cache_flush_key}`) {
+  if (request.method === 'POST' && new URL(request.url).pathname === `/.edgerender/flush-cache/${cache_flush_key}`) {
     // NOTE: this doesn't take care of the case where list_complete is false and we need to use a cursor
     let [cache_keys, cache_ts] = await Promise.all([CACHE.list(), CACHE.get('ts')])
     const key_count = cache_keys.keys.length
     if (cache_ts) {
-      cache_ts = new Date(cache_ts)
+      cache_ts = new Date(parseInt(cache_ts))
     }
     console.log(`flushing cache key_count=${key_count} cache_timestamp=${cache_ts} keys=`, cache_keys)
     await Promise.all(cache_keys.keys.map(k => CACHE.delete(k.name)))
@@ -69,7 +69,7 @@ class Env {
 
   async load(config_url, cache_ts) {
     this.cache_ts = cache_ts
-    const {parse_config, create_env} = await import('../edgerender-pkg')
+    const {parse_config, create_env} = await import('../pkg')
     this.config = await load_config(config_url, parse_config)
     console.log('config:', this.config)
     const templates = await load_templates_s3(this.config)
