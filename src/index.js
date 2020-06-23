@@ -6,8 +6,8 @@ export default function(event, config_url, cache_flush_key) {
 
 async function wrap_error(request, config_url, cache_flush_key) {
   console.log(`${request.method} ${request.url}`)
-  if (request.url.endsWith('skip-loading-wasm')) {
-    return new Response('skipped wasm, direct response')
+  if (request.url.endsWith('/short-circuit/')) {
+    return new Response('short-circuit: skipped wasm, direct response', {status: 202})
   }
   try {
     return await handle_request(request, config_url, cache_flush_key)
