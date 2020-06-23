@@ -78,9 +78,24 @@ fn to_json(obj: &SerdeValue, args: &HashMap<String, SerdeValue>) -> TeraResult<S
     Ok(SerdeValue::from(s))
 }
 
+cfg_if::cfg_if! {
+    // When the `console_error_panic_hook` feature is enabled, we can call the
+    // `set_panic_hook` function at least once during initialization, and then
+    // we will get better error messages if our code ever panics.
+    //
+    // For more details see
+    // https://github.com/rustwasm/console_error_panic_hook#readme
+    if #[cfg(feature = "console_error_panic_hook")] {
+        pub use console_error_panic_hook::set_once as set_panic_hook;
+    } else {
+        #[inline]
+        pub fn set_panic_hook() {}
+    }
+}
+
 #[wasm_bindgen]
 pub fn create_env(templates: &JsValue) -> Result<Env, JsValue> {
-    console_error_panic_hook::set_once();
+    set_panic_hook();
 
     let templates_vec: Vec<Template> = match templates.into_serde() {
         Err(e) => return err!("Error decoding templates: {}", e),

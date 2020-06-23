@@ -9,7 +9,7 @@ crate-type = ["cdylib", "rlib"]
 path = "src/rust/lib.rs"
 
 [features]
-default = ["console_error_panic_hook"]
+default = ["console_error_panic_hook", "wee_alloc"]
 
 [dependencies]
 cfg-if = "0.1.2"
@@ -38,4 +38,4 @@ wasm-bindgen-test = "0.3"
 
 [profile.release]
 # Tell `rustc` to optimize for small code size.
-opt-level = "s"
+opt-level = "z"
