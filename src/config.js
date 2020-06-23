@@ -22,9 +22,17 @@ export async function load_templates_s3(config) {
 }
 
 async function fetch_text(url) {
+  const cache_value = await CACHE.get(url)
+  if (cache_value) {
+    console.debug('fetch-text cache HIT', url)
+    return cache_value
+  }
+  console.debug('fetch-text cache MISS', url)
   const r = await fetch(`${url}${url.includes('?') ? '&' : '?'}ts=${new Date().getTime()}`)
   if (r.status === 200) {
-    return await r.text()
+    const text = await r.text()
+    await CACHE.put(url, text)
+    return text
   } else {
     throw Error(`unexpected response getting ${url}: ${r.status}`)
   }

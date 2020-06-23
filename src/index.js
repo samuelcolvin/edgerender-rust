@@ -1,36 +1,74 @@
 import {load_config, load_templates_s3} from './config'
 
-export default function(event, config_url) {
-  return event.respondWith(wrap_error(event.request, config_url))
+export default function(event, config_url, cache_flush_key) {
+  return event.respondWith(wrap_error(event.request, config_url, cache_flush_key))
 }
 
-let ENV = null
-
-async function wrap_error(request, config_url) {
+async function wrap_error(request, config_url, cache_flush_key) {
   console.log(`${request.method} ${request.url}`)
+  if (request.url.endsWith('skip-loading-wasm')) {
+    return new Response('skipped wasm, direct response')
+  }
   try {
-    if (!ENV) {
-      ENV = await new Env().load(config_url)
-    }
-    return await new Handler(ENV, request).handle()
+    return await handle_request(request, config_url, cache_flush_key)
   } catch (e) {
     console.error('error handling request:', request)
     console.error('config_url:', config_url)
     console.error('error:', e)
-    return new Response(`\nError occurred:\n\n${e.message}\n`, {
-      status: 500,
-      headers: {'content-type': 'text/plain'},
-    })
+    return new Response(`\nError occurred:\n\n${e.message}\n${e.stack}\n`, {status: 500})
   }
+}
+
+async function handle_request(request, config_url, cache_flush_key) {
+  if (request.method === 'POST' && new URL(request.url).pathname === `/.cache/flush/${cache_flush_key}`) {
+    // NOTE: this doesn't take care of the case where list_complete is false and we need to use a cursor
+    let [cache_keys, cache_ts] = await Promise.all([CACHE.list(), CACHE.get('ts')])
+    const key_count = cache_keys.keys.length
+    if (cache_ts) {
+      cache_ts = new Date(cache_ts)
+    }
+    console.log(`flushing cache key_count=${key_count} cache_timestamp=${cache_ts} keys=`, cache_keys)
+    await Promise.all(cache_keys.keys.map(k => CACHE.delete(k.name)))
+    ENV = null
+    await get_env(request, config_url)
+    const msg = `flushed cache and rebuilt, key_count=${key_count} cache_timestamp=${cache_ts}`
+    return new Response(msg, {status: 201})
+  } else {
+    const {env, cache_state} = await get_env(request, config_url)
+    return await new Handler(env, request, cache_state).handle()
+  }
+}
+
+let ENV = null
+
+async function get_env(request, config_url) {
+  // THIS makes sure old ENVs don't continue to be used after the KV cache has been flushed
+  let cache_state = 'miss'
+  let cache_ts = await CACHE.get('ts')
+  if (cache_ts) {
+    cache_state = 'hit-kv'
+  } else {
+    cache_ts = new Date().getTime().toString()
+    await CACHE.put('ts', cache_ts)
+  }
+  if (ENV && ENV.cache_ts === cache_ts) {
+    console.log('reusing existing ENV', ENV)
+    cache_state = 'hit-memory'
+  } else {
+    ENV = await new Env().load(config_url, cache_ts)
+  }
+  return {cache_state, env: ENV}
 }
 
 class Env {
   constructor() {
     this.load = this.load.bind(this)
     this.render = this.render.bind(this)
+    this.get_static_file = this.get_static_file.bind(this)
   }
 
-  async load(config_url) {
+  async load(config_url, cache_ts) {
+    this.cache_ts = cache_ts
     const {parse_config, create_env} = await import('../edgerender-pkg')
     this.config = await load_config(config_url, parse_config)
     console.log('config:', this.config)
@@ -48,29 +86,41 @@ class Env {
         throw e
       }
     }
+
     return this
   }
 
   render(route_match, upstream_json, response_status, upstream) {
     return this._rust_env.render(this.config, route_match, upstream_json, response_status, upstream)
   }
+
+  get_static_file(pathname) {
+    const static_url = this.config.get_static_file(pathname)
+    if (static_url) {
+      return `${static_url}${static_url.includes('?') ? '&' : '?'}ts=${this.cache_ts}`
+    }
+  }
 }
 
 class Handler {
-  constructor(env, request) {
+  constructor(env, request, cache_state) {
     this.env = env
     this.request = request
     this.url = new URL(request.url)
     this.upstream_json = null
     this.upstream = null
-    this.response_headers = {'content-type': 'text/html'}
+    this.response_headers = {
+      'content-type': 'text/html',
+      'edgerender-cache-state': cache_state,
+      'edgerender-cache-ts': new Date(parseInt(env.cache_ts)).toString(),
+    }
     this.response_status = null
     this.handle = this.handle.bind(this)
     this._get_upstream = this._get_upstream.bind(this)
   }
 
   async handle() {
-    const static_url = this.env.config.get_static_file(this.url.pathname)
+    const static_url = this.env.get_static_file(this.url.pathname)
     if (static_url) {
       console.log('static path, proxying request to:', static_url)
       return fetch(static_url, this.request)
