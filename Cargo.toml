@@ -39,9 +39,12 @@ wasm-bindgen-test = "0.3"
 [profile.release]
 # Tell `rustc` to optimize for small code size.
 opt-level = "z"
+# have a small but notiable effect on size:
+lto = true
+codegen-units = 1
 
 # see https://github.com/gonowa/wasm-opt for options
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ['-Os']
+wasm-opt = ["-Oz"]
 # useful when investigating wasm size with twiggy
 #wasm-opt = false

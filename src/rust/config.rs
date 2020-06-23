@@ -136,8 +136,13 @@ impl Config {
 }
 
 #[wasm_bindgen]
-pub fn parse_config(s: String, url: String, config_origin: String) -> Result<Config, JsValue> {
-    let mut config: Config = match serde_yaml::from_str(&s) {
+pub fn parse_config(config_str: String, url: String, config_origin: String) -> Result<Config, JsValue> {
+    // let mut config: Config = match serde_yaml::from_str(&config_str) {
+    //     Err(e) => return err!("Error loading config: {}", e),
+    //     Ok(config) => config,
+    // };
+    // TODO strip comments from config_str before parsing
+    let mut config: Config = match serde_json::from_str(&config_str) {
         Err(e) => return err!("Error loading config: {}", e),
         Ok(config) => config,
     };
